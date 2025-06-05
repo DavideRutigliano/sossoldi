@@ -3,6 +3,9 @@ import 'package:fl_chart/fl_chart.dart';
 
 import '../model/bank_account.dart';
 import '../model/transaction.dart';
+
+import '../services/bank_account.dart';
+
 import 'dashboard_provider.dart';
 import 'transactions_provider.dart';
 
@@ -15,7 +18,13 @@ final selectedAccountCurrentMonthDailyBalanceProvider =
 final selectedAccountLastTransactions = StateProvider<List>((ref) => const []);
 final filterAccountProvider = StateProvider<Map<int, bool>>((ref) => {});
 
+final bankAccountServiceProvider = Provider<BankAccountService>((ref) {
+  return BankAccountService();
+});
+
 class AsyncAccountsNotifier extends AsyncNotifier<List<BankAccount>> {
+  late final _service = ref.read(bankAccountServiceProvider);
+
   @override
   Future<List<BankAccount>> build() async {
     ref.watch(mainAccountProvider.notifier).state = await _getMainAccount();
@@ -29,12 +38,12 @@ class AsyncAccountsNotifier extends AsyncNotifier<List<BankAccount>> {
   }
 
   Future<List<BankAccount>> _getAccounts() async {
-    final accounts = await BankAccountMethods().selectAll();
+    final accounts = await _service.selectAll();
     return accounts;
   }
 
   Future<BankAccount?> _getMainAccount() async {
-    final account = await BankAccountMethods().selectMain();
+    final account = await _service.selectMain();
     return account;
   }
 
@@ -59,7 +68,7 @@ class AsyncAccountsNotifier extends AsyncNotifier<List<BankAccount>> {
 
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      await BankAccountMethods().insert(account);
+      await _service.insert(account);
       return _getAccounts();
     });
   }
@@ -86,7 +95,7 @@ class AsyncAccountsNotifier extends AsyncNotifier<List<BankAccount>> {
       if (balance != null && balance != account.total) {
         await _reconcileAccount(account: account, newBalance: balance);
       }
-      await BankAccountMethods().updateItem(account);
+      await _service.updateItem(account);
 
       if (account.mainAccount) {
         ref.read(mainAccountProvider.notifier).state = account;
@@ -129,7 +138,7 @@ class AsyncAccountsNotifier extends AsyncNotifier<List<BankAccount>> {
     ref.read(selectedAccountProvider.notifier).state = account;
 
     final currentMonthDailyBalance =
-        await BankAccountMethods().accountDailyBalance(
+        await _service.accountDailyBalance(
       account.id!,
       dateRangeStart: DateTime(
         DateTime.now().year,
@@ -152,13 +161,13 @@ class AsyncAccountsNotifier extends AsyncNotifier<List<BankAccount>> {
     }).toList();
 
     ref.read(selectedAccountLastTransactions.notifier).state =
-        await BankAccountMethods().getTransactions(account.id!, 50);
+        await _service.getTransactions(account.id!, 50);
   }
 
   Future<void> removeAccount(BankAccount account) async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
-      await BankAccountMethods().deactivateById(account.id!);
+      await _service.deactivateById(account.id!);
       if (account.mainAccount) ref.invalidate(mainAccountProvider);
       return _getAccounts();
     });
